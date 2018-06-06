@@ -3,10 +3,7 @@ package wechat
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
-
-	"github.com/astaxie/beego"
 )
 
 //设置所属行业https://api.weixin.qq.com/cgi-bin/template/api_set_industry?access_token=ACCESS_TOKEN
@@ -16,6 +13,11 @@ import (
 //删除模板https://api,weixin.qq.com/cgi-bin/template/del_private_template?access_token=ACCESS_TOKEN
 //
 
+//访问地址
+const (
+	TEMPLATESENDURL = "https://api.weixin.qq.com/cgi-bin/message/template/send"
+)
+
 //STTemplateData STTemplateData
 type STTemplateData struct {
 	Value string `json:"value,omitempty"`
@@ -24,25 +26,22 @@ type STTemplateData struct {
 
 //STTemplate STTemplate
 type STTemplate struct {
-	Touser     string      `json:"touser"`
-	Templateid string      `json:"template_id"`
-	URL        string      `json:"url"`
-	Data       interface{} `json:"data,json"`
+	Touser     string                    `json:"touser"`
+	Templateid string                    `json:"template_id"`
+	URL        string                    `json:"url"`
+	Data       map[string]STTemplateData `json:"data,json"`
 }
 
 //SendTemplate 发送模板消息https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=ACCESS_TOKEN
-func (wx *Wechat) SendTemplate(touser, templateid, url string, data map[string]STTemplateData) int {
-
-	t := STTemplate{touser, templateid, url, data}
-	d, _ := json.Marshal(t)
-
-	req, err := http.NewRequest("POST", "https://api.weixin.qq.com/cgi-bin/message/template/send?access_token="+
-		wx.AccessToken, bytes.NewReader(d))
+func (wx *Wechat) SendTemplate(touser, templateid, url string,
+	data map[string]STTemplateData) (string, error) {
+	tpl := STTemplate{touser, templateid, url, data}
+	rdata, _ := json.Marshal(tpl)
+	req, err := http.NewRequest("POST", TEMPLATESENDURL+"?access_token="+
+		wx.AccessToken, bytes.NewReader(rdata))
 	res, err := wx.requsetJSON(req, 0)
-	beego.Info(string(res))
 	if err != nil {
-		log.Println(err)
-		return 0
+		return "", err
 	}
-	return 1
+	return string(res), nil
 }

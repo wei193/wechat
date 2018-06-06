@@ -134,12 +134,10 @@ func (wx *Wechat) GetUserInfo(openid string) (userInfo STUserInfo, err error) {
 	req, err := http.NewRequest("GET", Param("https://api.weixin.qq.com/cgi-bin/user/info?lang=zh_CN", param), nil)
 	resBody, err := wx.requsetJSON(req, 0)
 	if err != nil {
-		log.Println(err)
 		return userInfo, err
 	}
 	err = json.Unmarshal(resBody, &userInfo)
 	if err != nil {
-		log.Println(err)
 		return userInfo, err
 	}
 

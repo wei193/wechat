@@ -36,12 +36,12 @@ type STMenu struct {
 type STCondMenu struct {
 	Button    []STButton  `json:"button"`
 	Matchrule STMatchrule `json:"matchrule"`
-	Menuid    int         `json:"menuid,omitempty"`
+	Menuid    string      `json:"menuid,omitempty"`
 }
 
 //STMatchrule 匹配规则
 type STMatchrule struct {
-	TagID              string `json:"tag_id,omitempty"`
+	Groupid            string `json:"group_id,omitempty"`
 	Sex                string `json:"sex,omitempty"`
 	ClientPlatformType string `json:"client_platform_type,omitempty"`
 	Country            string `json:"country,omitempty"`
@@ -110,11 +110,6 @@ func (wx *Wechat) CreatConditionalMenu(menu STCondMenu) (string, error) {
 	param["access_token"] = wx.AccessToken
 
 	d, _ := json.Marshal(menu)
-	d = bytes.Replace(d, []byte("\\u0026"), []byte("&"), -1)
-	d = bytes.Replace(d, []byte("\\u003c"), []byte("<"), -1)
-	d = bytes.Replace(d, []byte("\\u003e"), []byte(">"), -1)
-	d = bytes.Replace(d, []byte("\\u003d"), []byte("="), -1)
-
 	req, err := http.NewRequest("POST", Param("https://api.weixin.qq.com/cgi-bin/menu/addconditional", param),
 		bytes.NewReader(d))
 	if err != nil {
@@ -140,19 +135,15 @@ func (wx *Wechat) CreatConditionalMenu(menu STCondMenu) (string, error) {
 
 //DeleteConditionalMenu 删除自定义菜单
 func (wx *Wechat) DeleteConditionalMenu(menuid string) int {
-	id, err := strconv.Atoi(menuid)
-	if err != nil {
-		return 0
-	}
 	param := make(map[string]string)
 	param["access_token"] = wx.AccessToken
 
 	type stTmp struct {
-		Menuid int `json:"menuid"`
+		Menuid string `json:"menuid"`
 	}
-	temp := stTmp{id}
+	temp := stTmp{menuid}
 	d, _ := json.Marshal(temp)
-	req, err := http.NewRequest("POST", Param("https://api.weixin.qq.com/cgi-bin/menu/delconditional", param), bytes.NewReader(d))
+	req, err := http.NewRequest("GET", Param("https://api.weixin.qq.com/cgi-bin/menu/delconditional", param), bytes.NewReader(d))
 	if err != nil {
 		log.Println(err)
 		return 0

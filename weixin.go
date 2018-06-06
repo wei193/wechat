@@ -33,6 +33,10 @@ const (
 	Music    = "music"
 	News     = "news"
 
+	TOKENIGNORE   = -1
+	TOKENRETURN   = 0
+	TOKENCONTINUE = 1
+
 	URLGETCALLBACKIP = "https://api.weixin.qq.com/cgi-bin/getcallbackip"
 	URLTOKEN         = "https://api.weixin.qq.com/cgi-bin/token"
 	URLGETTICKET     = "https://api.weixin.qq.com/cgi-bin/ticket/getticket"
@@ -81,6 +85,15 @@ type resJsTicket struct {
 
 //Wechat 微信接口
 type Wechat struct {
+	TWechat
+	accTokenCount  int
+	JsapiTicket    string
+	JsapiTokenTime int64
+	_tlsConfig     *tls.Config
+}
+
+//TWechat 微信基本参数
+type TWechat struct {
 	Wxid            string
 	Appid           string
 	Appsecret       string
@@ -88,66 +101,91 @@ type Wechat struct {
 	Encodingaeskey  string
 	AccessToken     string
 	AccessTokenTime int64
-	Status          int
 	Expiresin       int
-	accTokenCount   int
+	Mode            int
+	MasterAddr      string
+	SlaveDomain     string
 	FunCall         map[string]CallbackFun
 	Option          map[string]string
 	AutoReply       map[string]map[string]STAutoReply
-	JsapiTicket     string
-	JsapiTokenTime  int64
-	_tlsConfig      *tls.Config
+	State           int
 }
 
-//New 新建一个微信对象
-func New(Wxid, Appid, Appsecret, Token, Encodingaeskey, AccessToken string,
-	AccessTokenTime int64, Status int, Option map[string]string, FunCall map[string]CallbackFun) (*Wechat, error) {
+//New 新建一个微信对象 State:1 主模式 State:2 从模式
+func New(wechat TWechat) (*Wechat, error) {
 
 	wx := &Wechat{
-		Wxid:            Wxid,
-		Token:           Token,
-		Appid:           Appid,
-		Appsecret:       Appsecret,
-		Encodingaeskey:  Encodingaeskey,
-		AccessToken:     AccessToken,
-		AccessTokenTime: AccessTokenTime,
-		Status:          Status,
-		Expiresin:       3600,
-		FunCall:         FunCall,
-		AutoReply:       nil,
-		Option:          Option,
+		TWechat: wechat,
 	}
-
 	if time.Now().Unix()-wx.AccessTokenTime > 3600 {
 		wx.getAccessToken()
 	} else {
 		wx.checkAccessToken()
 	}
 	wx.getJsapiTicket()
-	go wx.defendToken()
+
 	return wx, nil
 }
 
 //微信对象access_token维护
 func (wx *Wechat) defendToken() {
 	for {
-		time.Sleep(1 * time.Minute)
-		if time.Now().Unix()-wx.AccessTokenTime > 3600 {
-			wx.getAccessToken()
-			wx.accTokenCount = 0
+		if wx.Mode == 2 {
+			wx.slaveGetAccessToken()
 		} else {
-			wx.checkAccessToken()
+			if time.Now().Unix()-wx.AccessTokenTime > 3600 {
+				wx.getAccessToken()
+				wx.accTokenCount = 0
+			} else {
+				wx.checkAccessToken()
+			}
 		}
+
 		if time.Now().Unix()-wx.JsapiTokenTime > 3600 {
-			wx.getJsapiTicket()
+			if wx.getJsapiTicket() == 0 {
+				wx.getJsapiTicket()
+			}
 		}
+		time.Sleep(1 * time.Minute)
 	}
 }
 
+func (wx *Wechat) slaveGetAccessToken() (err error) {
+	param := make(map[string]string)
+	param["appid"] = wx.Appid
+	param["secret"] = wx.Appsecret
+	param["wx_id"] = wx.Wxid
+	param["slave_domain"] = wx.SlaveDomain
+
+	req, err := http.NewRequest("GET", Param(wx.MasterAddr, param), nil)
+	resBody, err := wx.requsetJSON(req, -1)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	var accToken ResAccessToken
+	err = json.Unmarshal(resBody, &accToken)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	wx.AccessTokenTime = time.Now().Unix() - int64(7600-accToken.Expiresin)
+	wx.AccessToken = accToken.AccessToken
+	wx.Expiresin = accToken.Expiresin
+
+	return nil
+}
+
 //获取access_token
-func (wx *Wechat) getAccessToken() int {
-	if wx.Status == 0 || (time.Now().Unix()-wx.AccessTokenTime < 60 && wx.accTokenCount > 5) {
-		return -1
+func (wx *Wechat) getAccessToken() (err error) {
+	if wx.Mode == 2 {
+		return wx.slaveGetAccessToken()
+	}
+
+	if wx.State == 0 ||
+		(time.Now().Unix()-wx.AccessTokenTime < 60 &&
+			wx.accTokenCount > 5) {
+		return errors.New("请求过快")
 	}
 
 	param := make(map[string]string)
@@ -160,18 +198,16 @@ func (wx *Wechat) getAccessToken() int {
 	resBody, err := wx.requsetJSON(req, -1)
 	if err != nil {
 		log.Println(err)
-		return -1
+		return err
 	}
-	log.Println(string(resBody))
 	var accToken ResAccessToken
-	accToken.Errcode = ""
 	err = json.Unmarshal(resBody, &accToken)
 	if err != nil {
 		log.Println(err)
-		return -1
+		return err
 	}
 	if accToken.Errcode != "" {
-		return -1
+		return errors.New("获取Token  失败")
 	}
 
 	if time.Now().Unix()-wx.AccessTokenTime < 60 {
@@ -180,13 +216,13 @@ func (wx *Wechat) getAccessToken() int {
 		wx.accTokenCount = 0
 	}
 
-	wx.AccessTokenTime = time.Now().Unix() - int64(7200-accToken.Expiresin)
+	wx.AccessTokenTime = time.Now().Unix() - int64(7600-accToken.Expiresin)
 	wx.AccessToken = accToken.AccessToken
 	wx.Expiresin = accToken.Expiresin
 	if _, ok := wx.FunCall["updatetoken"]; ok {
 		wx.FunCall["updatetoken"](wx)
 	}
-	return 0
+	return nil
 }
 
 //检查微信access_token有效性
@@ -241,18 +277,11 @@ func (wx *Wechat) CreateJsSignature(url, noncestr string, timestamp int64, data 
 	return SignSha1(data)
 }
 
-//Access Token 失效操作
-const (
-	TOKENIGNORE   = -1
-	TOKENRETURN   = 0
-	TOKENCONTINUE = 1
-)
-
 //发送微信请求
 func (wx *Wechat) requsetJSON(req *http.Request, tflag int) ([]byte, error) {
 	if tflag != TOKENIGNORE &&
 		time.Now().Unix()-wx.AccessTokenTime > int64(wx.Expiresin) {
-		if wx.getAccessToken() != 0 {
+		if wx.getAccessToken() != nil {
 			return nil, errors.New("获取ac_token出错")
 		}
 		if tflag == TOKENRETURN {
@@ -275,10 +304,10 @@ func (wx *Wechat) requsetJSON(req *http.Request, tflag int) ([]byte, error) {
 	return resBody, nil
 }
 
-func (wx *Wechat) requsetXML(req *http.Request, tflag int) ([]byte, error) {
+func (wx *Wechat) requsetXML(req *http.Request, tflag int, isXML ...bool) ([]byte, error) {
 	if tflag != TOKENIGNORE &&
 		time.Now().Unix()-wx.AccessTokenTime > int64(wx.Expiresin) {
-		if wx.getAccessToken() != 0 {
+		if wx.getAccessToken() != nil {
 			return nil, errors.New("获取ac_token出错")
 		}
 		if tflag == TOKENRETURN {
@@ -288,6 +317,9 @@ func (wx *Wechat) requsetXML(req *http.Request, tflag int) ([]byte, error) {
 	resBody, err := requset(req)
 	if err != nil {
 		return nil, err
+	}
+	if len(isXML) == 1 && !isXML[0] {
+		return resBody, nil
 	}
 	var errcode XMLError
 	err = xml.Unmarshal(resBody, &errcode)

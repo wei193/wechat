@@ -349,8 +349,7 @@ func (wx *Wechat) CheckSignature(signature, timestamp, nonce string) bool {
 
 	tmps := []string{wx.Token, timestamp, nonce}
 	sort.Strings(tmps)
-	tmpStr := tmps[0] + tmps[1] + tmps[2]
-
+	tmpStr := strings.Join(tmps, "")
 	t := sha1.New()
 	io.WriteString(t, tmpStr)
 	tmp := fmt.Sprintf("%x", t.Sum(nil))
