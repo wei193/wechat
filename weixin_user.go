@@ -112,7 +112,7 @@ func (wx *Wechat) GetUserInfoToken(accessToken, openid string) (userInfo STUserI
 	param["openid"] = openid
 
 	req, err := http.NewRequest("GET", Param("https://api.weixin.qq.com/sns/userinfo?lang=zh_CN", param), nil)
-	resBody, err := wx.requsetJSON(req, 1)
+	resBody, err := wx.requsetJSON(req, TOKENIGNORE)
 	if err != nil {
 		log.Println(err)
 		return userInfo, err
