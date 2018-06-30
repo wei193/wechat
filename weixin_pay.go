@@ -78,7 +78,7 @@ type ResQueryOrder struct {
 	TradeType          string `xml:"trade_type,omitempty"`
 	BankType           string `xml:"bank_type,omitempty"`
 	TotalFee           int    `xml:"total_fee,omitempty"`
-	SettlementTotalDee int    `xml:"settlement_total_fee,omitempty"`
+	SettlementTotalFee int    `xml:"settlement_total_fee,omitempty"`
 	FeeType            string `xml:"fee_type,omitempty"`
 	CashFee            int    `xml:"cash_fee,omitempty"`
 	CashFeeType        string `xml:"cash_fee_type,omitempty"`
