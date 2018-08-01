@@ -145,6 +145,7 @@ type ResCloseOrder struct {
 	Mchid      string `xml:"mch_id"`
 	NonceStr   string `xml:"nonce_str"`
 	Sign       string `xml:"sign"`
+	ResultCode string `xml:"result_code"`
 	ErrCode    string `xml:"err_code"`
 	ErrCodeDes string `xml:"err_code_des"`
 }
